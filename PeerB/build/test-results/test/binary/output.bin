@@ -1,0 +1,12 @@
+:[UDP RX] Desde 127.0.0.1:59974 -> sensor-01;BATTERY;85.0
+2[UDP TX] Respuesta enviada -> OK;BATTERY_OK;85.0
+4[UDP RX] Desde 127.0.0.1:59975 -> STATUS;sensor-01
+@[UDP TX] Respuesta enviada -> STATUS_OK;sensor-01;BATTERY;85.0
+=[UDP RX] Desde 127.0.0.1:59976 -> STATUS;sensor-desconocido
+6[UDP TX] Respuesta enviada -> ERROR;DEVICE_NOT_FOUND
+0[UDP RX] Desde 127.0.0.1:59977 -> INVALID_DATA
+4[UDP TX] Respuesta enviada -> ERROR;INVALID_FORMAT
+7[UDP RX] Desde 127.0.0.1:59979 -> sensor-01;TEMP;25.5
+5[UDP TX] Respuesta enviada -> OK;TEMP_RECORDED;25.5
+7[UDP RX] Desde 127.0.0.1:59980 -> sensor-01;TEMP;42.5
+;[UDP TX] Respuesta enviada -> ALERT;HIGH_TEMPERATURE;42.5

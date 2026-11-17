@@ -4,19 +4,21 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Cliente UDP que simula un dispositivo/sensor IoT (PeerA).
- * Envía lecturas de telemetría y consultas de estado a la Estación Base (PeerB),
- * esperando una respuesta dentro de una ventana de tiempo (timeout).
+ * Cliente UDP para el nodo sensor (PeerA).
+ * Envía paquetes de telemetría y consultas a la estación base con soporte de timeout.
  */
 public class SensorClient {
 
     private final String serverHost;
     private final int serverPort;
     private final int timeoutMs;
+
+    public SensorClient(String serverHost, int serverPort) {
+        this(serverHost, serverPort, 2000);
+    }
 
     public SensorClient(String serverHost, int serverPort, int timeoutMs) {
         this.serverHost = serverHost;
@@ -25,57 +27,34 @@ public class SensorClient {
     }
 
     /**
-     * Envía una lectura de telemetría al servidor y espera la confirmación o alerta.
-     * 
-     * @param deviceId Identificador único del dispositivo (ej. "sensor-01").
-     * @param sensorType Tipo de sensor ("TEMP", "HUMIDITY", "BATTERY").
-     * @param value Valor numérico de la lectura.
-     * @return Respuesta recibida de la estación base.
-     * @throws IOException Si ocurre un error de red o timeout.
-     */
-    public String sendTelemetry(String deviceId, String sensorType, double value) throws IOException {
-        String message = deviceId + ";" + sensorType + ";" + value;
-        return sendAndReceive(message);
-    }
-
-    /**
-     * Consulta el último estado registrado de un dispositivo en la estación base.
-     * 
-     * @param deviceId Identificador del dispositivo a consultar.
-     * @return Respuesta de estado recibida del servidor.
-     * @throws IOException Si ocurre un error de red o timeout.
-     */
-    public String queryStatus(String deviceId) throws IOException {
-        String message = "STATUS;" + deviceId;
-        return sendAndReceive(message);
-    }
-
-    /**
-     * Envía un mensaje en texto plano a través de UDP y espera la respuesta del servidor.
-     * 
-     * @param message Cadena de texto a transmitir.
-     * @return Cadena de texto recibida en la respuesta.
-     * @throws SocketTimeoutException Si transcurre el tiempo límite sin recibir respuesta.
-     * @throws IOException Si ocurre un error en el socket o resolución de red.
+     * Paso 3: Envía un mensaje UDP a la estación base y espera la respuesta con timeout.
+     *
+     * @param message Trama de texto a enviar codificada en UTF-8.
+     * @return Respuesta recibida del servidor.
+     * @throws java.net.SocketTimeoutException Si se agota el tiempo de espera configurado.
+     * @throws IOException Si ocurre un error de comunicación de red.
      */
     public String sendAndReceive(String message) throws IOException {
-        // TODO Paso 3.1: Crear un DatagramSocket (se recomienda usar bloque try-with-resources).
+        // 2. Abra un DatagramSocket (en un bloque try-with-resources)
+        try (DatagramSocket socket = new DatagramSocket()) {
+            // 3. Configure el timeout con socket.setSoTimeout(this.timeoutMs)
+            socket.setSoTimeout(this.timeoutMs);
 
-        // TODO Paso 3.2: Configurar el tiempo de espera máximo mediante socket.setSoTimeout(this.timeoutMs).
+            // 4. Empaquete el mensaje en un DatagramPacket hacia InetAddress.getByName(this.serverHost) y this.serverPort
+            byte[] sendBuffer = message.getBytes(StandardCharsets.UTF_8);
+            InetAddress address = InetAddress.getByName(this.serverHost);
+            DatagramPacket sendPacket = new DatagramPacket(sendBuffer, sendBuffer.length, address, this.serverPort);
 
-        // TODO Paso 3.3: Convertir 'message' a bytes en UTF-8 y construir el DatagramPacket
-        // con destino InetAddress.getByName(this.serverHost) y this.serverPort.
+            // 5. Envíe el datagrama con socket.send(...)
+            socket.send(sendPacket);
 
-        // TODO Paso 3.4: Enviar el paquete con socket.send(packet).
+            // 6. Reciba la respuesta con socket.receive(...) y decodifíquela a String respetando offset y length
+            byte[] receiveBuffer = new byte[2048];
+            DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+            socket.receive(receivePacket);
 
-        // TODO Paso 3.5: Crear un buffer receptor (byte[1024]) y un DatagramPacket para la respuesta.
-
-        // TODO Paso 3.6: Recibir la respuesta con socket.receive(responsePacket).
-
-        // TODO Paso 3.7: Convertir los bytes recibidos a String UTF-8 usando offset y length,
-        // aplicar trim() y retornar la cadena resultante.
-
-        return null; // Reemplazar con su implementación
+            return new String(receivePacket.getData(), receivePacket.getOffset(), receivePacket.getLength(), StandardCharsets.UTF_8);
+        }
     }
 
     public String getServerHost() {

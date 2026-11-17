@@ -11,19 +11,19 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class BaseStationServerTest {
 
     private BaseStationServer server;
-    private TelemetryProcessor processor;
+    private int serverPort;
 
     @BeforeEach
-    void setUp() throws Exception {
-        processor = new TelemetryProcessor();
-        // Puerto 0 para que el sistema operativo asigne automáticamente un puerto libre
-        server = new BaseStationServer(0, processor);
+    void setUp() throws IOException {
+        // Usar puerto 0 para que el sistema operativo asigne un puerto libre automáticamente
+        server = new BaseStationServer(0);
         server.start();
+        serverPort = server.getPort();
     }
 
     @AfterEach
@@ -33,72 +33,48 @@ public class BaseStationServerTest {
         }
     }
 
-    @Test
-    @DisplayName("IT-01: El servidor recibe datagrama UDP y responde correctamente al remitente")
-    void testServerReceivesAndRepliesViaUdp() throws IOException {
-        int serverPort = server.getPort();
-        assertTrue(serverPort > 0, "El servidor debe tener asignado un puerto válido.");
+    private String sendAndReceive(String message) throws IOException {
+        try (DatagramSocket clientSocket = new DatagramSocket()) {
+            clientSocket.setSoTimeout(3000);
+            byte[] sendBuffer = message.getBytes(StandardCharsets.UTF_8);
+            InetAddress host = InetAddress.getByName("localhost");
+            DatagramPacket sendPacket = new DatagramPacket(sendBuffer, sendBuffer.length, host, serverPort);
+            clientSocket.send(sendPacket);
 
-        try (DatagramSocket testClientSocket = new DatagramSocket()) {
-            testClientSocket.setSoTimeout(3000);
+            byte[] receiveBuffer = new byte[1024];
+            DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+            clientSocket.receive(receivePacket);
 
-            String requestMsg = "drone-01;TEMP;45.0";
-            byte[] sendData = requestMsg.getBytes(StandardCharsets.UTF_8);
-            DatagramPacket sendPacket = new DatagramPacket(
-                    sendData,
-                    sendData.length,
-                    InetAddress.getByName("127.0.0.1"),
-                    serverPort
-            );
-
-            // Enviar datagrama al servidor
-            testClientSocket.send(sendPacket);
-
-            // Esperar y recibir la respuesta del servidor
-            byte[] recvBuffer = new byte[1024];
-            DatagramPacket recvPacket = new DatagramPacket(recvBuffer, recvBuffer.length);
-            testClientSocket.receive(recvPacket);
-
-            String responseMsg = new String(
-                    recvPacket.getData(),
-                    recvPacket.getOffset(),
-                    recvPacket.getLength(),
-                    StandardCharsets.UTF_8
-            );
-
-            assertEquals("ALERT;HIGH_TEMPERATURE;45.0", responseMsg);
+            return new String(receivePacket.getData(), receivePacket.getOffset(), receivePacket.getLength(), StandardCharsets.UTF_8);
         }
     }
 
     @Test
-    @DisplayName("IT-02: El servidor procesa múltiples solicitudes de diferentes dispositivos")
-    void testServerMultipleRequests() throws IOException {
-        int serverPort = server.getPort();
+    @DisplayName("IT-01: Envío de telemetría y recepción de respuesta a través de Socket UDP")
+    void testIT01_SendTelemetryAndReceiveResponse() throws IOException {
+        String response = sendAndReceive("sensor-01;TEMP;25.5");
+        assertEquals("OK;TEMP_RECORDED;25.5", response);
 
-        try (DatagramSocket testClientSocket = new DatagramSocket()) {
-            testClientSocket.setSoTimeout(3000);
+        String alertResponse = sendAndReceive("sensor-01;TEMP;42.5");
+        assertEquals("ALERT;HIGH_TEMPERATURE;42.5", alertResponse);
+    }
 
-            // Primera solicitud: registrar telemetría
-            String msg1 = "sensor-A;BATTERY;10.0";
-            byte[] bytes1 = msg1.getBytes(StandardCharsets.UTF_8);
-            testClientSocket.send(new DatagramPacket(bytes1, bytes1.length, InetAddress.getByName("127.0.0.1"), serverPort));
+    @Test
+    @DisplayName("IT-02: Envío de consulta STATUS y validación de error de dispositivo no encontrado")
+    void testIT02_SendStatusQueryAndReceiveResponse() throws IOException {
+        // Primero registrar telemetría
+        sendAndReceive("sensor-01;BATTERY;85.0");
 
-            byte[] buf1 = new byte[1024];
-            DatagramPacket packet1 = new DatagramPacket(buf1, buf1.length);
-            testClientSocket.receive(packet1);
-            String res1 = new String(packet1.getData(), packet1.getOffset(), packet1.getLength(), StandardCharsets.UTF_8);
-            assertEquals("ALERT;LOW_BATTERY;10.0", res1);
+        // Consultar estado existente
+        String statusResponse = sendAndReceive("STATUS;sensor-01");
+        assertEquals("STATUS_OK;sensor-01;BATTERY;85.0", statusResponse);
 
-            // Segunda solicitud: consultar status del sensor recién registrado
-            String msg2 = "STATUS;sensor-A";
-            byte[] bytes2 = msg2.getBytes(StandardCharsets.UTF_8);
-            testClientSocket.send(new DatagramPacket(bytes2, bytes2.length, InetAddress.getByName("127.0.0.1"), serverPort));
+        // Consultar dispositivo no existente
+        String notFoundResponse = sendAndReceive("STATUS;sensor-desconocido");
+        assertEquals("ERROR;DEVICE_NOT_FOUND", notFoundResponse);
 
-            byte[] buf2 = new byte[1024];
-            DatagramPacket packet2 = new DatagramPacket(buf2, buf2.length);
-            testClientSocket.receive(packet2);
-            String res2 = new String(packet2.getData(), packet2.getOffset(), packet2.getLength(), StandardCharsets.UTF_8);
-            assertEquals("STATUS_OK;sensor-A;BATTERY;10.0", res2);
-        }
+        // Envío de trama con formato inválido
+        String invalidResponse = sendAndReceive("INVALID_DATA");
+        assertEquals("ERROR;INVALID_FORMAT", invalidResponse);
     }
 }

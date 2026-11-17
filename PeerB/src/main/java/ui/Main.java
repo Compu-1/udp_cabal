@@ -1,46 +1,61 @@
 package ui;
 
 import service.BaseStationServer;
-import service.TelemetryProcessor;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 
 /**
- * Punto de entrada principal para ejecutar la Estación Base (PeerB).
+ * Punto de entrada ejecutable para la Estación Base (PeerB).
+ * Inicia el servidor UDP en el puerto 5000 y muestra el log de actividad.
  */
 public class Main {
-    public static final int DEFAULT_PORT = 5000;
+
+    private static final int PORT = 5000;
 
     public static void main(String[] args) {
-        int port = DEFAULT_PORT;
-        if (args.length > 0) {
-            try {
-                port = Integer.parseInt(args[0]);
-            } catch (NumberFormatException ignored) {}
-        }
+        System.out.println("=============================================================");
+        System.out.println("   ESTACION BASE DE TELEMETRIA IoT - UDP SERVER (PEER B)     ");
+        System.out.println("=============================================================");
 
-        TelemetryProcessor processor = new TelemetryProcessor();
-        BaseStationServer server = new BaseStationServer(port, processor);
+        BaseStationServer server = new BaseStationServer(PORT);
 
         try {
             server.start();
-            System.out.println("==================================================");
-            System.out.println("  ESTACIÓN BASE UDP (PeerB) INICIADA CON ÉXITO   ");
-            System.out.println("==================================================");
-            System.out.println(" Escuchando en el puerto UDP: " + server.getPort());
-            System.out.println(" Esperando datagramas de sensores (PeerA)...");
-            System.out.println(" Presione Ctrl+C para detener el servidor.\n");
+            System.out.println("[INFO] Servidor escuchando en el puerto UDP " + PORT + "...");
+            System.out.println("[INFO] Esperando paquetes de sensores en campo (PeerA)...");
+            System.out.println("[INFO] Escriba 'q' + Enter o presione Ctrl+C para detener el servidor.");
+            System.out.println("-------------------------------------------------------------");
 
-            // Mantener el hilo principal vivo mientras el servidor esté activo
+            // Registrar ShutdownHook para cerrar limpiamente con Ctrl+C
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.out.println("\nCerrando Estación Base UDP...");
+                System.out.println("\n[INFO] Deteniendo servidor UDP...");
                 server.stop();
-                System.out.println("Servidor detenido.");
+                System.out.println("[INFO] Servidor detenido con exito.");
             }));
 
-            while (server.isRunning()) {
-                Thread.sleep(1000);
+            // Manejo tanto de consola interactiva como ejecución en segundo plano
+            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+            while (true) {
+                String line = reader.readLine();
+                if (line == null) {
+                    // Si la entrada estándar no está conectada a un TTY (ej. proceso en segundo plano)
+                    Thread.sleep(Long.MAX_VALUE);
+                    break;
+                }
+                if (line.trim().equalsIgnoreCase("q") || line.trim().equalsIgnoreCase("exit")) {
+                    break;
+                }
             }
+
+            System.out.println("[INFO] Deteniendo servidor UDP...");
+            server.stop();
+            System.out.println("[INFO] Servidor detenido.");
+
+        } catch (InterruptedException ignored) {
+            server.stop();
         } catch (Exception e) {
-            System.err.println("Error iniciando la Estación Base: " + e.getMessage());
+            System.err.println("[ERROR] Error en el servidor: " + e.getMessage());
             e.printStackTrace();
         }
     }

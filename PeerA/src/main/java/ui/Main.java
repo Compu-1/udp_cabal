@@ -1,105 +1,119 @@
 package ui;
 
 import client.SensorClient;
+
+import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.Scanner;
 
 /**
  * Punto de entrada interactivo para el Nodo Sensor (PeerA).
+ * Presenta un menú de consola para enviar tramas normales, alertas, consultas
+ * de estado o tramas personalizadas, mostrando el manejo de timeout en vivo.
  */
 public class Main {
 
-    public static final String DEFAULT_HOST = "127.0.0.1";
-    public static final int DEFAULT_PORT = 5000;
-    public static final int DEFAULT_TIMEOUT_MS = 2000;
+    private static final String SERVER_HOST = "localhost";
+    private static final int SERVER_PORT = 5000;
+    private static final int TIMEOUT_MS = 2000;
 
     public static void main(String[] args) {
-        String host = DEFAULT_HOST;
-        int port = DEFAULT_PORT;
-
-        if (args.length >= 1) {
-            host = args[0];
-        }
-        if (args.length >= 2) {
-            try {
-                port = Integer.parseInt(args[1]);
-            } catch (NumberFormatException ignored) {}
-        }
-
-        SensorClient client = new SensorClient(host, port, DEFAULT_TIMEOUT_MS);
+        SensorClient client = new SensorClient(SERVER_HOST, SERVER_PORT, TIMEOUT_MS);
         Scanner scanner = new Scanner(System.in);
 
-        System.out.println("==================================================");
-        System.out.println("     NODO SENSOR IoT (PeerA) - CLIENTE UDP       ");
-        System.out.println("==================================================");
-        System.out.println(" Servidor destino: " + host + ":" + port);
-        System.out.println(" Timeout configurado: " + DEFAULT_TIMEOUT_MS + " ms\n");
+        System.out.println("=============================================================");
+        System.out.println("       NODO SENSOR IoT - CLIENTE UDP (PEER A)                ");
+        System.out.println("=============================================================");
+        System.out.println("Servidor destino: " + SERVER_HOST + ":" + SERVER_PORT);
+        System.out.println("Timeout configurado: " + TIMEOUT_MS + " ms");
+        System.out.println("-------------------------------------------------------------");
 
-        boolean salir = false;
-        while (!salir) {
-            System.out.println("Seleccione una opción a enviar:");
-            System.out.println(" 1. Temperatura normal (24.5 °C)");
-            System.out.println(" 2. Alerta de temperatura alta (45.0 °C)");
-            System.out.println(" 3. Alerta de congelamiento (-8.0 °C)");
-            System.out.println(" 4. Humedad normal (55.0 %)");
-            System.out.println(" 5. Alerta de batería baja (12.0 %)");
-            System.out.println(" 6. Consultar estado del sensor (STATUS;sensor-01)");
-            System.out.println(" 7. Enviar trama personalizada");
-            System.out.println(" 0. Salir");
-            System.out.print("Opción > ");
+        boolean exit = false;
 
+        while (!exit) {
+            printMenu();
+            System.out.print("Seleccione una opción: ");
             String input = scanner.nextLine().trim();
 
-            try {
-                String response = null;
-                switch (input) {
-                    case "1":
-                        System.out.println(">> Enviando: sensor-01;TEMP;24.5");
-                        response = client.sendTelemetry("sensor-01", "TEMP", 24.5);
-                        break;
-                    case "2":
-                        System.out.println(">> Enviando: sensor-01;TEMP;45.0");
-                        response = client.sendTelemetry("sensor-01", "TEMP", 45.0);
-                        break;
-                    case "3":
-                        System.out.println(">> Enviando: sensor-01;TEMP;-8.0");
-                        response = client.sendTelemetry("sensor-01", "TEMP", -8.0);
-                        break;
-                    case "4":
-                        System.out.println(">> Enviando: sensor-01;HUMIDITY;55.0");
-                        response = client.sendTelemetry("sensor-01", "HUMIDITY", 55.0);
-                        break;
-                    case "5":
-                        System.out.println(">> Enviando: sensor-01;BATTERY;12.0");
-                        response = client.sendTelemetry("sensor-01", "BATTERY", 12.0);
-                        break;
-                    case "6":
-                        System.out.println(">> Consultando estado de sensor-01...");
-                        response = client.queryStatus("sensor-01");
-                        break;
-                    case "7":
-                        System.out.print("Ingrese la trama UDP completa (ej. drone-9;TEMP;30.0): ");
-                        String customMsg = scanner.nextLine().trim();
-                        System.out.println(">> Enviando: " + customMsg);
-                        response = client.sendAndReceive(customMsg);
-                        break;
-                    case "0":
-                        salir = true;
-                        System.out.println("Finalizando cliente.");
-                        continue;
-                    default:
-                        System.out.println("Opción no válida.");
-                        continue;
-                }
+            String messageToSend = null;
 
-                if (response != null) {
-                    System.out.println("<< Respuesta recibida del servidor: [" + response + "]\n");
-                }
-            } catch (SocketTimeoutException e) {
-                System.err.println("<< [ERROR TIMEOUT] El servidor no respondió dentro de los " + DEFAULT_TIMEOUT_MS + " ms.\n");
-            } catch (Exception e) {
-                System.err.println("<< [ERROR]: " + e.getMessage() + "\n");
+            switch (input) {
+                case "1":
+                    messageToSend = "sensor-01;TEMP;25.0";
+                    break;
+                case "2":
+                    messageToSend = "sensor-01;TEMP;42.5";
+                    break;
+                case "3":
+                    messageToSend = "sensor-01;TEMP;-5.0";
+                    break;
+                case "4":
+                    messageToSend = "sensor-01;HUMIDITY;60.0";
+                    break;
+                case "5":
+                    messageToSend = "sensor-01;HUMIDITY;93.0";
+                    break;
+                case "6":
+                    messageToSend = "sensor-01;HUMIDITY;18.0";
+                    break;
+                case "7":
+                    messageToSend = "sensor-01;BATTERY;80.0";
+                    break;
+                case "8":
+                    messageToSend = "sensor-01;BATTERY;15.0";
+                    break;
+                case "9":
+                    messageToSend = "STATUS;sensor-01";
+                    break;
+                case "10":
+                    System.out.print("Ingrese la trama personalizada (ej: sensor-02;TEMP;30.0): ");
+                    messageToSend = scanner.nextLine().trim();
+                    break;
+                case "0":
+                    exit = true;
+                    System.out.println("\n[INFO] Saliendo del programa. ¡Hasta luego!");
+                    continue;
+                default:
+                    System.out.println("\n[AVISO] Opción no válida. Por favor seleccione una opción del menú.\n");
+                    continue;
             }
+
+            if (messageToSend != null && !messageToSend.isEmpty()) {
+                sendAndDisplay(client, messageToSend);
+            }
+        }
+
+        scanner.close();
+    }
+
+    private static void printMenu() {
+        System.out.println("\n--- MENÚ DE TELEMETRÍA IoT ---");
+        System.out.println("1. Enviar Temperatura Normal               (sensor-01;TEMP;25.0)");
+        System.out.println("2. Enviar Alerta Temperatura Alta          (sensor-01;TEMP;42.5)");
+        System.out.println("3. Enviar Alerta Temperatura Bajo Cero     (sensor-01;TEMP;-5.0)");
+        System.out.println("4. Enviar Humedad Normal                   (sensor-01;HUMIDITY;60.0)");
+        System.out.println("5. Enviar Alerta Humedad Crítica Alta      (sensor-01;HUMIDITY;93.0)");
+        System.out.println("6. Enviar Alerta Humedad Crítica Baja      (sensor-01;HUMIDITY;18.0)");
+        System.out.println("7. Enviar Batería Normal                   (sensor-01;BATTERY;80.0)");
+        System.out.println("8. Enviar Alerta Batería Crítica           (sensor-01;BATTERY;15.0)");
+        System.out.println("9. Consultar Estado del Sensor             (STATUS;sensor-01)");
+        System.out.println("10. Enviar Trama Personalizada");
+        System.out.println("0. Salir");
+        System.out.println("-------------------------------------------------------------");
+    }
+
+    private static void sendAndDisplay(SensorClient client, String message) {
+        System.out.println("\n[TX] Enviando trama UDP: " + message);
+        long start = System.currentTimeMillis();
+        try {
+            String response = client.sendAndReceive(message);
+            long elapsed = System.currentTimeMillis() - start;
+            System.out.println("[RX] Respuesta de la Estación Base (" + elapsed + " ms): " + response);
+        } catch (SocketTimeoutException e) {
+            long elapsed = System.currentTimeMillis() - start;
+            System.err.println("[TIMEOUT] Tiempo de espera agotado (" + elapsed + " ms). La estación base no respondió.");
+        } catch (IOException e) {
+            System.err.println("[ERROR] Error de comunicación de red: " + e.getMessage());
         }
     }
 }
